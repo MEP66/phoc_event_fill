@@ -1,6 +1,7 @@
 import sys
 import time
 import re
+import subprocess
 import pyperclip  # pip install pyperclip (into virtual env)
 
 from selenium import webdriver
@@ -233,6 +234,7 @@ class NewBrowserConnection():
         
         self.driver.find_element(By.ID, "eventEmails_RouteCopySettings_lnkChangeContact").click()
 
+        time.sleep(1)  # Don't know why, but this keeps script from erroring out after first execution
         self.driver.switch_to.default_content()
         self.waitForClickable("FRAME_SWITCH", "idBaseIFrame_SelectRecipientDialog")
         self.waitForClickable("FRAME_SWITCH", "idReloadIFrame_SelectRecipientDialog")
@@ -240,6 +242,7 @@ class NewBrowserConnection():
         self.waitForClickable("ELEM_CLICKABLE", "ctl00_innerMainContainer_contactListDisplay_SearchBox")
         email_lookup_element = self.driver.find_element(By.ID, "ctl00_innerMainContainer_contactListDisplay_SearchBox")
         email_lookup_element.clear()
+        
         time.sleep(1)
         pyperclip.copy(self.leader_email)
         actions = ActionChains(self.driver)
@@ -248,13 +251,41 @@ class NewBrowserConnection():
             .perform()
 
 def prompt_new_browser():
-    print(f'\nOpen a new browser from a CMD prompt using the following line:\n\n' \
-            '"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" "https://phoc.club" --remote-debugging-port=9222 --user-data-dir="%temp%\\SeleniumEdgeProfile"\n' \
-            '\n' \
-            'Then log into phoc.club as Admin, open your first event for processing,\n' \
-            'and restart this program with the following:\n\n' \
-            'phoc_event_fill.exe -np\n')
-    
+    validresponse = False
+    while not validresponse:
+        response = input(f'\nAn Edge browser must be used with a debug port enabled. Do you wish to have that browser created now? (y/n/quit)\n\n')
+        if response in ('y', 'n', 'quit'):
+            validresponse = True
+
+    if response == 'y':
+        print(f'Opening a new browser using the following CMD:\n' \
+            '   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" "https://phoc.club" --remote-debugging-port=9222 --user-data-dir="%temp%\\SeleniumEdgeProfile"\n' \
+            '\n\n')
+        
+        # This will invoke a new Edge browser, and it will create a profile in the user's temp directory. (C:\Users\<userid>\AppData\Local\Temp)
+        # When this is done the first time, it is as if you are using a browser for the first time, and it takes you through all of the
+        # browser setup. For this reason, I don't delete this profile when the program is done. That way, you only have to go through
+        # the setup once.
+        command_list = [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", 
+                        r"https://phoc.club",
+                        r"--remote-debugging-port=9222",
+                        r"--user-data-dir=%temp%\PHOCSeleniumEdgeProfile"]
+        subprocess.Popen(command_list,
+                        shell=True, stdin=None, stdout=None, stderr=None,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+        input(f'Once the Edge browser is invoked:\n' \
+            '   * log into phoc.club as Admin\n' \
+            '   * open your first event for processing\n' \
+            '   * press "Enter" to continue processing the first event\n\n')
+        return False
+    elif response == 'n':
+        input(f'From the Edge browser you already have invoked:\n' \
+            '   * open your next event for processing\n' \
+            '   * press "Enter" to continue processing the next event\n\n')
+        return False
+    return True  # 'quit' was the input
+
 
 def main():
 
@@ -264,10 +295,17 @@ def main():
     # "C:\Program Files\Google\Chrome\Application\chrome.exe" "https://phoc.club" --remote-debugging-port=9222 --user-data-dir="%temp%\SeleniumChromeProfile"
 
     if len(sys.argv) <= 1:
-        prompt_new_browser()
+        quit_request = prompt_new_browser()
 
     elif sys.argv[1] == '-np':
-        print(f'Processing the event... Processing completes on the search of the leader email.')
+        quit_request = False
+        
+    else:
+        print(f'\nImproper command usage\n\n')
+        quit_request = True
+
+    if not quit_request:
+        print(f'Processing the event... Processing completes on the search of the leader email.\n\n')
         
         browser = NewBrowserConnection()
         browser.GetDefaultContext()
@@ -284,10 +322,6 @@ def main():
                 'and then re-launch this script with the following:\n' \
                 '\n' \
                 'phoc_event_fill.exe -np\n')
-        
-    else:
-        print(f'\nImproper command usage\n\n')
-        prompt_new_browser()
     
     sys.exit()
 
