@@ -143,6 +143,7 @@ class NewBrowserConnection():
         html_text = re.sub(r'<STRONG>Distance: *</STRONG> *miles *<br>', '', html_text)
         html_text = re.sub(r'R-,', '', html_text)
         html_text = re.sub(r'<STRONG>Difficulty: *</STRONG> *<br>', '', html_text)
+        html_text = re.sub(r'<STRONG>Intended Pace: *</STRONG> *<br>', '', html_text)
         html_text = re.sub(r'<STRONG>Elevation Gain: *</STRONG> *ft. *<br>', '', html_text)
         html_text = re.sub(r'<STRONG>Required Gear: *</STRONG> *<br>', '', html_text)
         html_text = re.sub(r'<STRONG>Max Participants: *</STRONG> *<br>', '', html_text)
