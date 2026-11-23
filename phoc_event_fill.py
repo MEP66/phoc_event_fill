@@ -7,7 +7,7 @@ import pyperclip  # pip install pyperclip (into virtual env)
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.edge.options import Options
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -89,6 +89,13 @@ class NewBrowserConnection():
 
     def ProcessEventdetailsTab(self):
 
+        def text_strong_present_ignore_case(driver):
+            try:
+                element = driver.find_element(By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer")
+                return "<strong>" in element.text.lower()
+            except (NoSuchElementException, StaleElementReferenceException):
+                return False
+
         ##### Tab: Event details
         # Check box: Show registrants who want to be listed
         # Button: to members only
@@ -128,26 +135,28 @@ class NewBrowserConnection():
         self.driver.switch_to.default_content()
         html_edit_window = self.driver.find_element(By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer")
 
-        WebDriverWait(self.driver, 10).until(
-            EC.text_to_be_present_in_element((By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer"), '<strong>')
-            )
+        # Wait for element to appear. I've seen <STRONG> and <strong> in the
+        # HTML code, so allow for both.
+        WebDriverWait(self.driver, 10).until(text_strong_present_ignore_case)
 
-        # Clean up the html description text of un-wanted text.
+        # Clean up the html description text of un-wanted text. (Those entries
+        # where no value was provided by the submitter.)
+        # Once again, look for the 'STRONG' tag with case insensitivity.
         html_text = html_edit_window.text
         html_text = html_text.replace('\n', '')
-        html_text = re.search(r'<strong>.*', html_text).group(0)
+        html_text = re.search(r'<(?i:strong)>.*', html_text).group(0)
         
         substring_to_remove = 'Move to "Additional event information"'
         pattern = re.escape(substring_to_remove) + r'.*'
         html_text = re.sub(pattern, "", html_text)
 
-        html_text = re.sub(r'<strong>Distance: *</string> *miles *<br>', '', html_text)
+        html_text = re.sub(r'<(?i:strong)>Distance: *</(?i:strong)> *miles *<br>', '', html_text)
         html_text = re.sub(r'R-,', '', html_text)
-        html_text = re.sub(r'<strong>Difficulty: *</strong> *<br>', '', html_text)
-        html_text = re.sub(r'<strong>Intended Pace: *</strong> *<br>', '', html_text)
-        html_text = re.sub(r'<strong>Elevation Gain: *</strong> *ft. *<br>', '', html_text)
-        html_text = re.sub(r'<strong>Required Gear: *</strong> *<br>', '', html_text)
-        html_text = re.sub(r'<strong>Max Participants: *</strong> *<br>', '', html_text)
+        html_text = re.sub(r'<(?i:strong)>Difficulty: *</(?i:strong)> *<br>', '', html_text)
+        html_text = re.sub(r'<(?i:strong)>Intended Pace: *</(?i:strong)> *<br>', '', html_text)
+        html_text = re.sub(r'<(?i:strong)>Elevation Gain: *</(?i:strong)> *ft. *<br>', '', html_text)
+        html_text = re.sub(r'<(?i:strong)>Required Gear: *</(?i:strong)> *<br>', '', html_text)
+        html_text = re.sub(r'<(?i:strong)>Max Participants: *</(?i:strong)> *<br>', '', html_text)
         html_text = re.sub(r' {2,}', ' ', html_text)
         
         # Delete the existing html text.
