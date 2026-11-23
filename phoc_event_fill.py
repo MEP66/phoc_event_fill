@@ -157,7 +157,7 @@ class NewBrowserConnection():
         html_text = re.sub(r'<(?i:strong)>Elevation Gain: *</(?i:strong)> *ft. *<br>', '', html_text)
         html_text = re.sub(r'<(?i:strong)>Required Gear: *</(?i:strong)> *<br>', '', html_text)
         html_text = re.sub(r'<(?i:strong)>Max Participants: *</(?i:strong)> *<br>', '', html_text)
-        html_text = re.sub(r' {2,}', ' ', html_text)
+        html_text = re.sub(r' {2,}', ' ', html_text)  # Substitute double space for single space
         
         # Delete the existing html text.
         actions = ActionChains(self.driver)
