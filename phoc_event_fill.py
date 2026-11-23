@@ -268,10 +268,18 @@ class NewBrowserConnection():
             .key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL) \
             .perform()
 
-        row = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, f'//table//tbody//tr[contains(., "{self.leader_email}")]'))
-        )
-        row.click()
+
+        try:
+            row = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((By.XPATH, f'//table//tbody//tr[contains(., "{self.leader_email}")]'))
+            )
+            row.click()
+        except TimeoutException:
+            print(f"\n\n   STOPPING: Could not find '{self.leader_email}' in the search table.\n")
+            if hasattr(self, "driver") and self.driver.service.process:
+                self.driver.service.stop()  # Keeps the browser and model open on stop
+            sys.exit(0)  # Shouldn't reach this, but this exits cleanly with no traceback or PyInstaller error popup
+
         # Press the "Select Button"
         select_btn = WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.ID, "ctl00_innerMainContainer_proceedButton"))
@@ -343,7 +351,7 @@ def main():
         quit_request = True
 
     if not quit_request:
-        print(f'Processing the event... Processing completes on the search of the leader email.\n\n')
+        print(f'Processing the event... Processing completes on the search of the leader email.')
         
         browser = NewBrowserConnection()
         browser.GetDefaultContext()
@@ -360,7 +368,7 @@ def main():
 
         browser.teardown()
 
-        print(f'Processing complete. Save the current event, open the next,\n' \
+        print(f'Processing complete. Save the current event, open the next event,\n' \
                 'and then re-launch this script with the following:\n' \
                 '\n' \
                 'phoc_event_fill.exe -np\n')
