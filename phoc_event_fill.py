@@ -13,6 +13,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait, Select
 
 
 class NewBrowserConnection():
@@ -128,25 +129,25 @@ class NewBrowserConnection():
         html_edit_window = self.driver.find_element(By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer")
 
         WebDriverWait(self.driver, 10).until(
-            EC.text_to_be_present_in_element((By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer"), '<STRONG>')
+            EC.text_to_be_present_in_element((By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer"), '<strong>')
             )
 
         # Clean up the html description text of un-wanted text.
         html_text = html_edit_window.text
         html_text = html_text.replace('\n', '')
-        html_text = re.search(r'<STRONG>.*', html_text).group(0)
+        html_text = re.search(r'<strong>.*', html_text).group(0)
         
         substring_to_remove = 'Move to "Additional event information"'
         pattern = re.escape(substring_to_remove) + r'.*'
         html_text = re.sub(pattern, "", html_text)
 
-        html_text = re.sub(r'<STRONG>Distance: *</STRONG> *miles *<br>', '', html_text)
+        html_text = re.sub(r'<strong>Distance: *</string> *miles *<br>', '', html_text)
         html_text = re.sub(r'R-,', '', html_text)
-        html_text = re.sub(r'<STRONG>Difficulty: *</STRONG> *<br>', '', html_text)
-        html_text = re.sub(r'<STRONG>Intended Pace: *</STRONG> *<br>', '', html_text)
-        html_text = re.sub(r'<STRONG>Elevation Gain: *</STRONG> *ft. *<br>', '', html_text)
-        html_text = re.sub(r'<STRONG>Required Gear: *</STRONG> *<br>', '', html_text)
-        html_text = re.sub(r'<STRONG>Max Participants: *</STRONG> *<br>', '', html_text)
+        html_text = re.sub(r'<strong>Difficulty: *</strong> *<br>', '', html_text)
+        html_text = re.sub(r'<strong>Intended Pace: *</strong> *<br>', '', html_text)
+        html_text = re.sub(r'<strong>Elevation Gain: *</strong> *ft. *<br>', '', html_text)
+        html_text = re.sub(r'<strong>Required Gear: *</strong> *<br>', '', html_text)
+        html_text = re.sub(r'<strong>Max Participants: *</strong> *<br>', '', html_text)
         html_text = re.sub(r' {2,}', ' ', html_text)
         
         # Delete the existing html text.
@@ -230,16 +231,32 @@ class NewBrowserConnection():
         self.check_element("eventEmails_registrationNewWaitlistEntry_cbxAttendee")
         self.check_element("eventEmails_registrationNewWaitlistEntry_cbxAdmin")
 
-        # Finally, check the button to send to a specific member and look up email address.
-        self.check_element("eventEmails_RouteCopySettings_rbtUseSpecificContact")
-        
-        self.driver.find_element(By.ID, "eventEmails_RouteCopySettings_lnkChangeContact").click()
 
+
+    def ProcessEventOrganizer(self):
+
+        ##### Tab: Event details
+        # Have to go back to the Event Details tab for this
+        # Look for the "Event organizers" section
+        # Click on "+ Add organizer" and search for name
+
+        print(f'   Finally, back to the Event details tab to get Event Organizer...')
+        
+        self.driver.switch_to.default_content()
+        self.waitForClickable("FRAME_SWITCH", "contentFrame")
+        self.waitForClickable("ELEM_CLICKABLE", "1-link-id_InnerControl")
+        self.driver.find_element(By.ID, "1-link-id_InnerControl").click()
+        
+
+        # Finally, check the button to send to a specific member and look up email address.
+        self.waitForClickable("ELEM_CLICKABLE", "eventDetailsMain_eventOrganizers_eventOrganizersEditor")
+        self.driver.find_element(By.CSS_SELECTOR, 'input.typeButton[value="+ Add organizer"]').click()
+        #self.driver.find_element(By.ID, "eventOrganizersAdd").click()
         time.sleep(1)  # Don't know why, but this keeps script from erroring out after first execution
+        
         self.driver.switch_to.default_content()
         self.waitForClickable("FRAME_SWITCH", "idBaseIFrame_SelectRecipientDialog")
         self.waitForClickable("FRAME_SWITCH", "idReloadIFrame_SelectRecipientDialog")
-        
         self.waitForClickable("ELEM_CLICKABLE", "ctl00_innerMainContainer_contactListDisplay_SearchBox")
         email_lookup_element = self.driver.find_element(By.ID, "ctl00_innerMainContainer_contactListDisplay_SearchBox")
         email_lookup_element.clear()
@@ -250,6 +267,26 @@ class NewBrowserConnection():
         actions.click(email_lookup_element) \
             .key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL) \
             .perform()
+
+        row = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, f'//table//tbody//tr[contains(., "{self.leader_email}")]'))
+        )
+        row.click()
+        # Press the "Select Button"
+        select_btn = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "ctl00_innerMainContainer_proceedButton"))
+        )
+        select_btn.click()
+
+        # Finally select the 'Event lead' management level
+        self.driver.switch_to.default_content()
+        self.waitForClickable("FRAME_SWITCH", "contentFrame")
+        dropdown_el = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "eventOrganizerLevelSelect"))
+        )
+        select = Select(dropdown_el)
+        select.select_by_visible_text("Event lead")
+
 
 def prompt_new_browser():
     validresponse = False
@@ -316,6 +353,10 @@ def main():
         browser.ProcessTickettypeTab()
         browser.ProcessWaitlistTab()
         browser.ProcessEmailsTab()
+
+        # This is most likely to fail, if we can't find the leader's email address.
+        # Therefore, we will do this very last.
+        browser.ProcessEventOrganizer()
 
         browser.teardown()
 
