@@ -7,8 +7,7 @@ import pyperclip  # pip install pyperclip (into virtual env)
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.edge.options import Options
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
@@ -243,72 +242,71 @@ class NewBrowserConnection():
 
 
     def ProcessEventOrganizer(self):
+        print("   Finally, back to the Event details tab to get Event Organizer...")
+        wait = WebDriverWait(
+            self.driver, 
+            15, 
+            ignored_exceptions=(StaleElementReferenceException,)
+        )
 
-        ##### Tab: Event details
-        # Have to go back to the Event Details tab for this
-        # Look for the "Event organizers" section
-        # Click on "+ Add organizer" and search for name
-
-        print(f'   Finally, back to the Event details tab to get Event Organizer...')
-        
+        # 1. Switch to the main content frame and open the Event Details tab
         self.driver.switch_to.default_content()
-        self.waitForClickable("FRAME_SWITCH", "contentFrame")
-        self.waitForClickable("ELEM_CLICKABLE", "1-link-id_InnerControl")
-        self.driver.find_element(By.ID, "1-link-id_InnerControl").click()
+        wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "contentFrame")))
+        wait.until(EC.element_to_be_clickable((By.ID, "1-link-id_InnerControl"))).click()
         
-
-        # Finally, check the button to send to a specific member and look up email address.
-        self.waitForClickable("ELEM_CLICKABLE", "eventDetailsMain_eventOrganizers_eventOrganizersEditor")
-        self.driver.find_element(By.CSS_SELECTOR, 'input.typeButton[value="+ Add organizer"]').click()
-        #self.driver.find_element(By.ID, "eventOrganizersAdd").click()
-        time.sleep(1)  # Don't know why, but this keeps script from erroring out after first execution
+        # 2. Wait for the organizers container and click "+ Add organizer"
+        wait.until(EC.element_to_be_clickable((By.ID, "eventDetailsMain_eventOrganizers_eventOrganizersEditor")))
+        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input.typeButton[value="+ Add organizer"]'))).click()
         
+        # 3. Switch into the outer modal iframe
         self.driver.switch_to.default_content()
-        self.waitForClickable("FRAME_SWITCH", "idBaseIFrame_SelectRecipientDialog")
-        self.waitForClickable("FRAME_SWITCH", "idReloadIFrame_SelectRecipientDialog")
-        self.waitForClickable("ELEM_CLICKABLE", "ctl00_innerMainContainer_contactListDisplay_SearchBox")
-        email_lookup_element = self.driver.find_element(By.ID, "ctl00_innerMainContainer_contactListDisplay_SearchBox")
+        wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "idBaseIFrame_SelectRecipientDialog")))
+
+        # 4. Safely enter the inner reloading iframe and wait for SearchBox to be ready
+        def switch_to_reloaded_iframe_and_get_searchbox(driver):
+            try:
+                driver.switch_to.default_content()
+                driver.switch_to.frame("idBaseIFrame_SelectRecipientDialog")
+                driver.switch_to.frame("idReloadIFrame_SelectRecipientDialog")
+                box = driver.find_element(By.ID, "ctl00_innerMainContainer_contactListDisplay_SearchBox")
+                if box.is_displayed() and box.is_enabled():
+                    return box
+            except (NoSuchElementException, StaleElementReferenceException, Exception):
+                pass
+            return False
+
+        email_lookup_element = wait.until(switch_to_reloaded_iframe_and_get_searchbox)
         email_lookup_element.clear()
-        
-        time.sleep(1)
-        pyperclip.copy(self.leader_email)
-        actions = ActionChains(self.driver)
-        actions.click(email_lookup_element) \
-            .key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL) \
-            .perform()
+        email_lookup_element.send_keys(self.leader_email)
 
-
+        # 5. Select the matching row, or halt cleanly if not found
+        row_locator = (By.XPATH, f'//table//tbody//tr[contains(., "{self.leader_email}")]')
         try:
-            row = WebDriverWait(self.driver, 3).until(
-                EC.element_to_be_clickable((By.XPATH, f'//table//tbody//tr[contains(., "{self.leader_email}")]'))
-            )
+            row = WebDriverWait(
+                self.driver, 
+                4, 
+                ignored_exceptions=(StaleElementReferenceException,)
+            ).until(EC.element_to_be_clickable(row_locator))
             row.click()
         except TimeoutException:
             print(f"\n\n   STOPPING: Could not find '{self.leader_email}' in the search table.\n")
             if hasattr(self, "driver") and self.driver.service.process:
-                self.driver.service.stop()  # Keeps the browser and model open on stop
-            sys.exit(0)  # Shouldn't reach this, but this exits cleanly with no traceback or PyInstaller error popup
+                self.driver.service.stop()
+            sys.exit(0)
 
-        # Press the "Select Button"
-        select_btn = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "ctl00_innerMainContainer_proceedButton"))
-        )
-        select_btn.click()
+        # 6. Click the "Select" button to close the modal
+        wait.until(EC.element_to_be_clickable((By.ID, "ctl00_innerMainContainer_proceedButton"))).click()
 
-        # Finally select the 'Event lead' management level
+        # 7. Switch back to contentFrame and select 'Event lead'
         self.driver.switch_to.default_content()
-        self.waitForClickable("FRAME_SWITCH", "contentFrame")
-        dropdown_el = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, "eventOrganizerLevelSelect"))
-        )
-        select = Select(dropdown_el)
-        select.select_by_visible_text("Event lead")
-
+        wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "contentFrame")))
+        dropdown_el = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "eventOrganizerLevelSelect")))
+        Select(dropdown_el).select_by_visible_text("Event lead")
 
 def prompt_new_browser():
     validresponse = False
     while not validresponse:
-        response = input(f'\nAn Edge browser must be used with a debug port enabled. Do you wish to have that browser created now? (y/n/quit)\n\n')
+        response = input(f'\nAn Edge browser must be used with a debug port enabled. Do you wish to have that browser created now? (y/n/quit): ')
         if response in ('y', 'n', 'quit'):
             validresponse = True
 
