@@ -1,6 +1,7 @@
 import sys
 import re
 import subprocess
+import pyperclip
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -9,7 +10,8 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait, Select
-
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 
 class NewBrowserConnection():
     def __init__(self):
@@ -142,7 +144,8 @@ class NewBrowserConnection():
         if strong_match:
             html_text = strong_match.group(0)
 
-        html_text = re.sub(re.escape('Move to "Additional event information"') + r'.*', '', html_text)
+        pattern = r'(?:<[^>]+>\s*)*Move to (?:"|&quot;)Additional event information(?:"|&quot;) section below.*'
+        html_text = re.sub(pattern, '', html_text, flags=re.IGNORECASE | re.DOTALL)
 
         empty_fields = [
             r'Distance:\s*</(?i:strong)>\s*miles\s*<br>',
@@ -159,22 +162,19 @@ class NewBrowserConnection():
         html_text = re.sub(r' {2,}', ' ', html_text).strip()
 
         # 7. Inject the cleaned HTML directly and save
-        self.driver.execute_script(
-            "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('change'));",
-            html_edit_window,
-            html_text,
-        )
+        pyperclip.copy(html_text)
+        actions = ActionChains(self.driver)
+        actions.click(html_edit_window) \
+        .key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL) \
+        .send_keys(Keys.DELETE) \
+        .key_down(Keys.CONTROL).send_keys("v").key_up(Keys.CONTROL) \
+        .perform()
+
+
+        # 8. Save the result
         self.wait_and_click("idBEditor_EditHTML_Dialog_SaveButton")
 
-        # 8. Populate the "Additional event information" box at the bottom
-        self.switch_to_frame("contentFrame")
-        addtn_info_window = self.wait_for_clickable("eventDetailsMain_editExtraEventInfo")
-        addtn_info_window.clear()
-        if move_below_text:
-            addtn_info_window.send_keys(move_below_text)
-
-        # 8. Populate the "Additional event information" box at the bottom
-        self.driver.switch_to.default_content()
+        # 9. Populate the "Additional event information" box at the bottom
         self.switch_to_frame("contentFrame")
         addtn_info_window = self.wait_for_clickable("eventDetailsMain_editExtraEventInfo")
         addtn_info_window.clear()
@@ -338,7 +338,8 @@ def prompt_new_browser():
     elif response == 'n':
         input(f'From the Edge browser you already have invoked:\n' \
             '   * open your next event for processing\n' \
-            '   * press "Enter" to continue processing the next event\n\n')
+            '   * press "Enter" to continue processing the next event\n' \
+            'Waiting for your input: ')
         return False
     return True  # 'quit' was the input
 
@@ -361,7 +362,7 @@ def main():
         quit_request = True
 
     if not quit_request:
-        print(f'Processing the event... Processing completes on the search of the leader email.')
+        print(f'\nProcessing the event... Processing completes on the search of the leader email.')
         
         browser = NewBrowserConnection()
         browser.GetDefaultContext()
