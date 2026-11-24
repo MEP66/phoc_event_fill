@@ -32,31 +32,32 @@ class NewBrowserConnection():
         if not cur_element.is_selected():
             cur_element.click()
     
-    def waitForClickable(self, type, id):
-        timeoutsec = 30
+    def _get_wait(self, timeout=15):
+        return WebDriverWait(
+            self.driver,
+            timeout,
+            ignored_exceptions=(StaleElementReferenceException,),
+        )
 
-        try:
-            match type:
-                case "FRAME_SWITCH":
-                    WebDriverWait(self.driver, timeoutsec).until(
-                        EC.frame_to_be_available_and_switch_to_it((By.ID, id))
-                    )
-                case "ELEM_CLICKABLE":
-                    WebDriverWait(self.driver, timeoutsec).until(
-                        EC.element_to_be_clickable((By.ID, id))
-                    )
-            
-        except TimeoutException:
-            # Handle the case where the element is not found within 10 seconds
-            print("Timeout: Element not found within the specified time.")
-    
-        except NoSuchElementException:
-            # Some ExpectedConditions might throw NoSuchElementException (e.g. text_to_be_present_in_element)
-            print("No such element found in the DOM.")
+    def switch_to_frame(self, locator, from_default=True, timeout=15):
+        """Optionally resets to default_content, waits for a frame, and switches into it."""
+        if isinstance(locator, str):
+            locator = (By.ID, locator)
+        if from_default:
+            self.driver.switch_to.default_content()
+        self._get_wait(timeout).until(EC.frame_to_be_available_and_switch_to_it(locator))
 
-        except Exception as e:
-            # Catch other potential exceptions
-            print(f"An unexpected error occurred: {e}")
+    def wait_for_clickable(self, locator, timeout=15):
+        """Waits for an element to be clickable and returns the WebElement."""
+        if isinstance(locator, str):
+            locator = (By.ID, locator)
+        return self._get_wait(timeout).until(EC.element_to_be_clickable(locator))
+
+    def wait_and_click(self, locator, timeout=15):
+        """Waits for an element to be clickable, clicks it, and returns it."""
+        element = self.wait_for_clickable(locator, timeout)
+        element.click()
+        return element
 
 
     def GetDefaultContext(self):
@@ -89,36 +90,37 @@ class NewBrowserConnection():
 
     def ProcessEventdetailsTab(self):
         print("   Processing the Event details tab...")
-        wait = WebDriverWait(self.driver, 10)
 
         # 1. Switch to contentFrame and open the Event Details tab
-        self.driver.switch_to.default_content()
-        self.waitForClickable("FRAME_SWITCH", "contentFrame")
-        self.waitForClickable("ELEM_CLICKABLE", "1-link-id_InnerControl")
-        self.driver.find_element(By.ID, "1-link-id_InnerControl").click()
+        self.switch_to_frame("contentFrame")
+        self.wait_and_click("1-link-id_InnerControl")
 
         # 2. Check attendee visibility boxes
-        self.waitForClickable("ELEM_CLICKABLE", "eventDetailsMain_editAttendeesSettings_showRegistrantsList")
+        self.wait_for_clickable("eventDetailsMain_editAttendeesSettings_showRegistrantsList")
         self.check_element("eventDetailsMain_editAttendeesSettings_showRegistrantsList")
         self.check_element("eventDetailsMain_editAttendeesSettings_visibilityMembers")
 
-        # 3. Switch into the dynamic Event Description editor iframe and extract text
-        editor_iframe = wait.until(
-            EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, "iframe[id^='idEditorIFrame_']"))
+        # 3. Switch into the dynamic Event Description editor iframe (without resetting to default_content)
+        self.switch_to_frame((By.CSS_SELECTOR, "iframe[id^='idEditorIFrame_']"), from_default=False)
+        text_element = self._get_wait(10).until(
+            EC.presence_of_element_located((By.ID, "idPrimaryContentBlock1Content"))
         )
-        text_element = wait.until(EC.presence_of_element_located((By.ID, "idPrimaryContentBlock1Content")))
         description_text = text_element.text
 
         email_match = re.search(r'Email:\s*(.*?)[\r\n]', description_text)
         self.leader_email = email_match.group(1).strip() if email_match else ""
 
-        addtl_match = re.search(r'Move to "Additional event information" section below\s*\n(.*)', description_text, re.DOTALL)
+        addtl_match = re.search(
+            r'Move to "Additional event information" section below\s*\n(.*)',
+            description_text,
+            re.DOTALL,
+        )
         move_below_text = addtl_match.group(1).strip() if addtl_match else ""
 
         # 4. Open the HTML source editor modal
         text_element.click()
         self.driver.switch_to.parent_frame()
-        wait.until(EC.element_to_be_clickable((By.ID, "idEditorToolbar_EditorEventDescriptionLocalToolbar_HTML_HTMLEdit"))).click()
+        self.wait_and_click("idEditorToolbar_EditorEventDescriptionLocalToolbar_HTML_HTMLEdit")
 
         # 5. Wait for the HTML editor textarea to load and contain <strong>
         self.driver.switch_to.default_content()
@@ -132,7 +134,7 @@ class NewBrowserConnection():
             except (NoSuchElementException, StaleElementReferenceException):
                 return False
 
-        html_edit_window = wait.until(html_box_ready)
+        html_edit_window = self._get_wait(10).until(html_box_ready)
 
         # 6. Clean up unwanted/empty fields from the HTML source
         html_text = (html_edit_window.get_attribute("value") or html_edit_window.text).replace('\n', '')
@@ -140,10 +142,8 @@ class NewBrowserConnection():
         if strong_match:
             html_text = strong_match.group(0)
 
-        # Strip everything from 'Move to "Additional event information"' onward
         html_text = re.sub(re.escape('Move to "Additional event information"') + r'.*', '', html_text)
 
-        # Remove empty optional fields
         empty_fields = [
             r'Distance:\s*</(?i:strong)>\s*miles\s*<br>',
             r'Difficulty:\s*</(?i:strong)>\s*<br>',
@@ -158,18 +158,25 @@ class NewBrowserConnection():
         html_text = html_text.replace('R-,', '')
         html_text = re.sub(r' {2,}', ' ', html_text).strip()
 
-        # 7. Inject the cleaned HTML directly (no clipboard or sleep needed) and save
+        # 7. Inject the cleaned HTML directly and save
         self.driver.execute_script(
             "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('change'));",
             html_edit_window,
             html_text,
         )
-        wait.until(EC.element_to_be_clickable((By.ID, "idBEditor_EditHTML_Dialog_SaveButton"))).click()
+        self.wait_and_click("idBEditor_EditHTML_Dialog_SaveButton")
+
+        # 8. Populate the "Additional event information" box at the bottom
+        self.switch_to_frame("contentFrame")
+        addtn_info_window = self.wait_for_clickable("eventDetailsMain_editExtraEventInfo")
+        addtn_info_window.clear()
+        if move_below_text:
+            addtn_info_window.send_keys(move_below_text)
 
         # 8. Populate the "Additional event information" box at the bottom
         self.driver.switch_to.default_content()
-        self.waitForClickable("FRAME_SWITCH", "contentFrame")
-        addtn_info_window = wait.until(EC.element_to_be_clickable((By.ID, "eventDetailsMain_editExtraEventInfo")))
+        self.switch_to_frame("contentFrame")
+        addtn_info_window = self.wait_for_clickable("eventDetailsMain_editExtraEventInfo")
         addtn_info_window.clear()
         if move_below_text:
             addtn_info_window.send_keys(move_below_text)
@@ -182,9 +189,9 @@ class NewBrowserConnection():
         # because the waitlist checkbox is only shown when a registration limit is set.
         print("   Processing the Ticket types & settings tab...")
 
-        self.waitForClickable("ELEM_CLICKABLE", "3-link-id_InnerControl")
+        self.wait_for_clickable("3-link-id_InnerControl")
         self.driver.find_element(By.ID, "3-link-id_InnerControl").click()
-        self.waitForClickable("ELEM_CLICKABLE", "ctl03_cbMultipleRegistration")
+        self.wait_for_clickable("ctl03_cbMultipleRegistration")
 
         waitlist_boxes = self.driver.find_elements(By.ID, "ctl03_waitlistEnableCheckBox")
         if waitlist_boxes and waitlist_boxes[0].is_displayed():
@@ -194,7 +201,7 @@ class NewBrowserConnection():
         print("   Processing the Waitlist tab...")
 
         # 1. Switch to the Waitlist & settings tab safely
-        self.waitForClickable("ELEM_CLICKABLE", "6-link-id_InnerControl")
+        self.wait_for_clickable("6-link-id_InnerControl")
         self.driver.find_element(By.ID, "6-link-id_InnerControl").click()
 
         # 2. Wait for the tab content to load, then select both radio options
@@ -202,7 +209,7 @@ class NewBrowserConnection():
             "eventWaitlistMain_eventWaitlistRegistrationTypeSelector_rbRegistrationTypeAuto",
             "eventWaitlistMain_informationToCollectSelector_rbInformationToCollectContactInformation",
         ]
-        self.waitForClickable("ELEM_CLICKABLE", radio_ids[0])
+        self.wait_for_clickable(radio_ids[0])
 
         for radio_id in radio_ids:
             self.check_element(radio_id)
@@ -211,7 +218,7 @@ class NewBrowserConnection():
         print("   Processing the Emails details tab...")
 
         # 1. Switch to the Emails tab safely``
-        self.waitForClickable("ELEM_CLICKABLE", "4-link-id_InnerControl")
+        self.wait_for_clickable("4-link-id_InnerControl")
         self.driver.find_element(By.ID, "4-link-id_InnerControl").click()
 
         # 2. Wait for the first checkbox to confirm the tab finished loading
@@ -228,7 +235,8 @@ class NewBrowserConnection():
             "eventEmails_registrationNewWaitlistEntry_cbxAttendee",
             "eventEmails_registrationNewWaitlistEntry_cbxAdmin",
         ]
-        self.waitForClickable("ELEM_CLICKABLE", checkbox_ids[0])
+        self.wait_for_clickable(checkbox_ids[0])
+
 
         # 3. Check all 11 email notification boxes
         for checkbox_id in checkbox_ids:
