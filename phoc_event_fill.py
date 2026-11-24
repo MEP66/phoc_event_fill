@@ -194,16 +194,16 @@ class NewBrowserConnection():
     def ProcessTickettypeTab(self):
         ##### Tab: Ticket types & settings
         # Check box: Enable waitlist when limit is reached
-        # This element is only displayed if the wait limit is set. Since this elemnet
-        # may or may not be displayed, I have to wait on another element to be clickable
-        # (the Multiple registrations checkbox) to make sure the page is loaded. 
-        print(f'   Processing the Ticket types & settings tab...')
-        
+        # Wait for Multiple registrations checkbox first to confirm the tab finished loading,
+        # because the waitlist checkbox is only shown when a registration limit is set.
+        print("   Processing the Ticket types & settings tab...")
+
+        self.waitForClickable("ELEM_CLICKABLE", "3-link-id_InnerControl")
         self.driver.find_element(By.ID, "3-link-id_InnerControl").click()
         self.waitForClickable("ELEM_CLICKABLE", "ctl03_cbMultipleRegistration")
 
-        element = self.driver.find_element(By.ID, "ctl03_waitlistEnableCheckBox")
-        if element.is_displayed():
+        waitlist_boxes = self.driver.find_elements(By.ID, "ctl03_waitlistEnableCheckBox")
+        if waitlist_boxes and waitlist_boxes[0].is_displayed():
             self.check_element("ctl03_waitlistEnableCheckBox")
 
     def ProcessWaitlistTab(self):
