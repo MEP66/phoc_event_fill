@@ -144,8 +144,10 @@ class NewBrowserConnection():
         if strong_match:
             html_text = strong_match.group(0)
 
-        pattern = r'(?:<[^>]+>\s*)*Move to (?:"|&quot;)Additional event information(?:"|&quot;) section below.*'
+        pattern = r'Move to (?:"|&quot;)Additional event information(?:"|&quot;) section below.*'
         html_text = re.sub(pattern, '', html_text, flags=re.IGNORECASE | re.DOTALL)
+
+        print(f'{html_text}')
 
         empty_fields = [
             r'Distance:\s*</(?i:strong)>\s*miles\s*<br>',
@@ -333,7 +335,8 @@ def prompt_new_browser():
         input(f'Once the Edge browser is invoked:\n' \
             '   * log into phoc.club as Admin\n' \
             '   * open your first event for processing\n' \
-            '   * press "Enter" to continue processing the first event\n\n')
+            '   * press "Enter" to continue processing the first event\n' \
+            'Waiting for your input: ')
         return False
     elif response == 'n':
         input(f'From the Edge browser you already have invoked:\n' \
