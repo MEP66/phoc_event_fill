@@ -207,17 +207,21 @@ class NewBrowserConnection():
             self.check_element("ctl03_waitlistEnableCheckBox")
 
     def ProcessWaitlistTab(self):
-        ##### Tab: Waitlist & settings
-        # Button: Automatic registration
-        # Button: All contact information
-        print(f'   Processing the Waitlist tab...')
+        print("   Processing the Waitlist tab...")
 
+        # 1. Switch to the Waitlist & settings tab safely
+        self.waitForClickable("ELEM_CLICKABLE", "6-link-id_InnerControl")
         self.driver.find_element(By.ID, "6-link-id_InnerControl").click()
-        self.waitForClickable("ELEM_CLICKABLE", "eventWaitlistMain_eventWaitlistRegistrationTypeSelector_rbRegistrationTypeAuto")
-        
-        self.check_element("eventWaitlistMain_eventWaitlistRegistrationTypeSelector_rbRegistrationTypeAuto")
-        self.check_element("eventWaitlistMain_informationToCollectSelector_rbInformationToCollectContactInformation")
 
+        # 2. Wait for the tab content to load, then select both radio options
+        radio_ids = [
+            "eventWaitlistMain_eventWaitlistRegistrationTypeSelector_rbRegistrationTypeAuto",
+            "eventWaitlistMain_informationToCollectSelector_rbInformationToCollectContactInformation",
+        ]
+        self.waitForClickable("ELEM_CLICKABLE", radio_ids[0])
+
+        for radio_id in radio_ids:
+            self.check_element(radio_id)
 
     def ProcessEmailsTab(self):
         print("   Processing the Emails details tab...")
