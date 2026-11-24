@@ -77,118 +77,106 @@ class NewBrowserConnection():
 
 
     def ClickEdit(self):
-
         self.driver.switch_to.window(self.main_handle)
         self.driver.switch_to.default_content()
 
+        # Click on the Edit button and switch into contentFrame
+        wait = WebDriverWait(self.driver, 10)
+        edit_btn = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, ".btn-group > .btn:nth-child(1)"))
+        )
+        edit_btn.click()
 
-        # Click on the Edit button, and switch to contentFrame
-        self.driver.find_element(By.CSS_SELECTOR, ".btn-group > .btn:nth-child(1)").click()
+        wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "contentFrame")))
+
 
 
     def ProcessEventdetailsTab(self):
+        print("   Processing the Event details tab...")
+        wait = WebDriverWait(self.driver, 10)
 
-        def text_strong_present_ignore_case(driver):
-            try:
-                element = driver.find_element(By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer")
-                return "<strong>" in element.text.lower()
-            except (NoSuchElementException, StaleElementReferenceException):
-                return False
-
-        ##### Tab: Event details
-        # Check box: Show registrants who want to be listed
-        # Button: to members only
-        print(f'   Processing the Event details tab...')
-        
+        # 1. Switch to contentFrame and open the Event Details tab
         self.driver.switch_to.default_content()
         self.waitForClickable("FRAME_SWITCH", "contentFrame")
         self.waitForClickable("ELEM_CLICKABLE", "1-link-id_InnerControl")
         self.driver.find_element(By.ID, "1-link-id_InnerControl").click()
-        
+
+        # 2. Check attendee visibility boxes
         self.waitForClickable("ELEM_CLICKABLE", "eventDetailsMain_editAttendeesSettings_showRegistrantsList")
         self.check_element("eventDetailsMain_editAttendeesSettings_showRegistrantsList")
         self.check_element("eventDetailsMain_editAttendeesSettings_visibilityMembers")
 
-        # Next find the Event Detail frame. There is a unique ID number in this frame,
-        # so we have to wildcard it. Fetch the leader email (to be used later) as well
-        # as the text that needs to be moved below to the Additional event information box.
-        frameElement = self.driver.find_element(By.CSS_SELECTOR, "iframe[id^='idEditorIFrame_']")
-        self.driver.switch_to.frame(frameElement)
-        text_element = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "idPrimaryContentBlock1Content"))
-            )
+        # 3. Switch into the dynamic Event Description editor iframe and extract text
+        editor_iframe = wait.until(
+            EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, "iframe[id^='idEditorIFrame_']"))
+        )
+        text_element = wait.until(EC.presence_of_element_located((By.ID, "idPrimaryContentBlock1Content")))
         description_text = text_element.text
 
-        email_pattern = r'Email: (.*?)[\r\n]'
-        self.leader_email = re.search(email_pattern, description_text).group(1)
+        email_match = re.search(r'Email:\s*(.*?)[\r\n]', description_text)
+        self.leader_email = email_match.group(1).strip() if email_match else ""
 
-        addtl_info_pattern = r'Move to "Additional event information" section below\n(.*)'
-        move_below_text = re.search(addtl_info_pattern, description_text, re.DOTALL).group(1)
-        
-        # Clean up the HTML text box
-        
-        self.driver.find_element(By.ID, "idPrimaryContentBlock1Content").click()
+        addtl_match = re.search(r'Move to "Additional event information" section below\s*\n(.*)', description_text, re.DOTALL)
+        move_below_text = addtl_match.group(1).strip() if addtl_match else ""
+
+        # 4. Open the HTML source editor modal
+        text_element.click()
         self.driver.switch_to.parent_frame()
-        self.driver.find_element(By.ID, "idEditorToolbar_EditorEventDescriptionLocalToolbar_HTML_HTMLEdit").click()
+        wait.until(EC.element_to_be_clickable((By.ID, "idEditorToolbar_EditorEventDescriptionLocalToolbar_HTML_HTMLEdit"))).click()
 
+        # 5. Wait for the HTML editor textarea to load and contain <strong>
         self.driver.switch_to.default_content()
-        html_edit_window = self.driver.find_element(By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer")
+        html_box_locator = (By.ID, "idBEditor_EditHTML_Dialog_HTMLCodeContainer")
 
-        # Wait for element to appear. I've seen <STRONG> and <strong> in the
-        # HTML code, so allow for both.
-        WebDriverWait(self.driver, 10).until(text_strong_present_ignore_case)
+        def html_box_ready(driver):
+            try:
+                el = driver.find_element(*html_box_locator)
+                content = el.get_attribute("value") or el.text
+                return el if "<strong>" in content.lower() else False
+            except (NoSuchElementException, StaleElementReferenceException):
+                return False
 
-        # Clean up the html description text of un-wanted text. (Those entries
-        # where no value was provided by the submitter.)
-        # Once again, look for the 'STRONG' tag with case insensitivity.
-        html_text = html_edit_window.text
-        html_text = html_text.replace('\n', '')
-        html_text = re.search(r'<(?i:strong)>.*', html_text).group(0)
-        
-        substring_to_remove = 'Move to "Additional event information"'
-        pattern = re.escape(substring_to_remove) + r'.*'
-        html_text = re.sub(pattern, "", html_text)
+        html_edit_window = wait.until(html_box_ready)
 
-        html_text = re.sub(r'<(?i:strong)>Distance: *</(?i:strong)> *miles *<br>', '', html_text)
-        html_text = re.sub(r'R-,', '', html_text)
-        html_text = re.sub(r'<(?i:strong)>Difficulty: *</(?i:strong)> *<br>', '', html_text)
-        html_text = re.sub(r'<(?i:strong)>Intended Pace: *</(?i:strong)> *<br>', '', html_text)
-        html_text = re.sub(r'<(?i:strong)>Elevation Gain: *</(?i:strong)> *ft. *<br>', '', html_text)
-        html_text = re.sub(r'<(?i:strong)>Required Gear: *</(?i:strong)> *<br>', '', html_text)
-        html_text = re.sub(r'<(?i:strong)>Max Participants: *</(?i:strong)> *<br>', '', html_text)
-        html_text = re.sub(r' {2,}', ' ', html_text)  # Substitute double space for single space
-        
-        # Delete the existing html text.
-        actions = ActionChains(self.driver)
-        actions.click(html_edit_window) \
-            .key_down(Keys.CONTROL) \
-            .send_keys("a") \
-            .key_up(Keys.CONTROL) \
-            .send_keys(Keys.DELETE) \
-            .perform()
+        # 6. Clean up unwanted/empty fields from the HTML source
+        html_text = (html_edit_window.get_attribute("value") or html_edit_window.text).replace('\n', '')
+        strong_match = re.search(r'(?i)<strong>.*', html_text)
+        if strong_match:
+            html_text = strong_match.group(0)
 
-        # Paste the new text
-        pyperclip.copy(html_text)
+        # Strip everything from 'Move to "Additional event information"' onward
+        html_text = re.sub(re.escape('Move to "Additional event information"') + r'.*', '', html_text)
 
-        actions.click(html_edit_window) \
-            .key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL) \
-            .perform()
+        # Remove empty optional fields
+        empty_fields = [
+            r'Distance:\s*</(?i:strong)>\s*miles\s*<br>',
+            r'Difficulty:\s*</(?i:strong)>\s*<br>',
+            r'Intended Pace:\s*</(?i:strong)>\s*<br>',
+            r'Elevation Gain:\s*</(?i:strong)>\s*ft\.\s*<br>',
+            r'Required Gear:\s*</(?i:strong)>\s*<br>',
+            r'Max Participants:\s*</(?i:strong)>\s*<br>',
+        ]
+        for field_pattern in empty_fields:
+            html_text = re.sub(r'<(?i:strong)>' + field_pattern, '', html_text)
 
-        # Save the result
-        self.driver.find_element(By.ID, "idBEditor_EditHTML_Dialog_SaveButton").click()
+        html_text = html_text.replace('R-,', '')
+        html_text = re.sub(r' {2,}', ' ', html_text).strip()
 
-        # Paste the Additional information in the text box at the bottom.
+        # 7. Inject the cleaned HTML directly (no clipboard or sleep needed) and save
+        self.driver.execute_script(
+            "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('change'));",
+            html_edit_window,
+            html_text,
+        )
+        wait.until(EC.element_to_be_clickable((By.ID, "idBEditor_EditHTML_Dialog_SaveButton"))).click()
+
+        # 8. Populate the "Additional event information" box at the bottom
         self.driver.switch_to.default_content()
         self.waitForClickable("FRAME_SWITCH", "contentFrame")
-        
-        addtn_info_window = self.driver.find_element(By.ID, "eventDetailsMain_editExtraEventInfo")
+        addtn_info_window = wait.until(EC.element_to_be_clickable((By.ID, "eventDetailsMain_editExtraEventInfo")))
         addtn_info_window.clear()
-        time.sleep(1)
-
-        pyperclip.copy(move_below_text)
-        actions.click(addtn_info_window) \
-            .key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL) \
-            .perform()
+        if move_below_text:
+            addtn_info_window.send_keys(move_below_text)
 
 
     def ProcessTickettypeTab(self):
