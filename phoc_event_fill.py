@@ -220,25 +220,31 @@ class NewBrowserConnection():
 
 
     def ProcessEmailsTab(self):
-        #### Tab: Emails
-        # Check box: All 11 email boxes
-        print(f'   Processing the Emails details tab...')
+        print("   Processing the Emails details tab...")
 
+        # 1. Switch to the Emails tab safely``
+        self.waitForClickable("ELEM_CLICKABLE", "4-link-id_InnerControl")
         self.driver.find_element(By.ID, "4-link-id_InnerControl").click()
-        self.waitForClickable("ELEM_CLICKABLE", "eventEmails_registrationConfirmedOffline_cbxAttendee")
-        
-        self.check_element("eventEmails_registrationConfirmedOffline_cbxAttendee")
-        self.check_element("eventEmails_registrationConfirmedOffline_cbxGuest")
-        self.check_element("eventEmails_registrationConfirmedOffline_cbxAdmin")
-        self.check_element("eventEmails_registrationPendingOffline_cbxAttendee")
-        self.check_element("eventEmails_registrationPendingOffline_cbxGuest")
-        self.check_element("eventEmails_registrationPendingOffline_cbxAdmin")
-        self.check_element("eventEmails_registrationCanceled_cbxAttendee")
-        self.check_element("eventEmails_registrationCanceled_cbxGuest")
-        self.check_element("eventEmails_registrationCanceled_cbxAdmin")
-        self.check_element("eventEmails_registrationNewWaitlistEntry_cbxAttendee")
-        self.check_element("eventEmails_registrationNewWaitlistEntry_cbxAdmin")
 
+        # 2. Wait for the first checkbox to confirm the tab finished loading
+        checkbox_ids = [
+            "eventEmails_registrationConfirmedOffline_cbxAttendee",
+            "eventEmails_registrationConfirmedOffline_cbxGuest",
+            "eventEmails_registrationConfirmedOffline_cbxAdmin",
+            "eventEmails_registrationPendingOffline_cbxAttendee",
+            "eventEmails_registrationPendingOffline_cbxGuest",
+            "eventEmails_registrationPendingOffline_cbxAdmin",
+            "eventEmails_registrationCanceled_cbxAttendee",
+            "eventEmails_registrationCanceled_cbxGuest",
+            "eventEmails_registrationCanceled_cbxAdmin",
+            "eventEmails_registrationNewWaitlistEntry_cbxAttendee",
+            "eventEmails_registrationNewWaitlistEntry_cbxAdmin",
+        ]
+        self.waitForClickable("ELEM_CLICKABLE", checkbox_ids[0])
+
+        # 3. Check all 11 email notification boxes
+        for checkbox_id in checkbox_ids:
+            self.check_element(checkbox_id)
 
 
     def ProcessEventOrganizer(self):
@@ -302,6 +308,7 @@ class NewBrowserConnection():
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "contentFrame")))
         dropdown_el = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "eventOrganizerLevelSelect")))
         Select(dropdown_el).select_by_visible_text("Event lead")
+
 
 def prompt_new_browser():
     validresponse = False
