@@ -1,3 +1,6 @@
+# I had to use the following line to create a standalone executable:
+#   python -m PyInstaller --onefile --collect-all selenium phoc_event_fill.py
+
 import sys
 import re
 import subprocess
